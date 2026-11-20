@@ -1,0 +1,193 @@
+openapi: 3.1.0
+info:
+  title: Stock Slice API
+  version: 1.0.0
+  description: In-memory portfolio allocation and weekday execution scheduling. No trades are routed or executed.
+servers:
+  - url: http://localhost:4000
+paths:
+  /api/health:
+    get:
+      summary: Health and process-local order count
+      responses:
+        '200':
+          description: API is available
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { const: ok }
+                  storage: { const: in-memory }
+                  orders: { type: integer }
+  /api/config:
+    get:
+      summary: Service calculation configuration
+      responses:
+        '200':
+          description: Share precision, default price, and currency
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sharePrecision, defaultPrice, currency]
+                properties:
+                  sharePrecision: { type: integer, minimum: 0, maximum: 10 }
+                  defaultPrice: { const: 100 }
+                  currency: { const: USD }
+  /api/portfolios:
+    get:
+      summary: List portfolios saved in this process
+      responses:
+        '200':
+          description: Portfolio list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, count]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Portfolio' } }
+                  count: { type: integer }
+    post:
+      summary: Save a reusable model portfolio in memory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PortfolioInput' }
+      responses:
+        '201':
+          description: Portfolio saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Portfolio' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+  /api/orders:
+    get:
+      summary: List orders created in this process, newest first
+      responses:
+        '200':
+          description: Order history
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, count]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Order' } }
+                  count: { type: integer }
+    post:
+      summary: Calculate and store an order split
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateOrderRequest' }
+      responses:
+        '201':
+          description: Calculated order
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Order' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '429': { description: Order creation rate limit exceeded }
+  /api/orders/{id}:
+    get:
+      summary: Get an order from process-local history
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Order
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Order' }
+        '404': { description: Order not found }
+components:
+  responses:
+    ValidationError:
+      description: Invalid JSON request data
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: object
+                properties:
+                  code: { const: VALIDATION_ERROR }
+                  message: { type: string }
+                  details: { type: array, items: { type: object } }
+  schemas:
+    Holding:
+      type: object
+      additionalProperties: false
+      required: [symbol, allocationPercent]
+      properties:
+        symbol: { type: string, minLength: 1, maxLength: 12, pattern: '^[A-Za-z0-9.-]+$' }
+        allocationPercent: { type: number, exclusiveMinimum: 0, maximum: 100 }
+        marketPrice: { type: number, exclusiveMinimum: 0, maximum: 1000000 }
+    PortfolioInput:
+      type: object
+      additionalProperties: false
+      required: [holdings]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        holdings:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items: { $ref: '#/components/schemas/Holding' }
+      description: Symbols are unique and allocations must total 100%.
+    Portfolio:
+      allOf:
+        - $ref: '#/components/schemas/PortfolioInput'
+        - type: object
+          required: [id, createdAt]
+          properties:
+            id: { type: string, format: uuid }
+            createdAt: { type: string, format: date-time }
+    CreateOrderRequest:
+      type: object
+      additionalProperties: false
+      required: [type, amount, portfolio]
+      properties:
+        type: { type: string, enum: [BUY, SELL] }
+        amount: { type: number, exclusiveMinimum: 0, maximum: 1000000000, multipleOf: 0.01 }
+        portfolio: { $ref: '#/components/schemas/PortfolioInput' }
+    Allocation:
+      type: object
+      required: [symbol, allocationPercent, price, amount, shares, estimatedTradeValue, unallocatedAmount]
+      properties:
+        symbol: { type: string }
+        allocationPercent: { type: number }
+        price: { type: number }
+        amount: { type: number }
+        shares: { type: number }
+        estimatedTradeValue: { type: number }
+        unallocatedAmount: { type: number }
+    Order:
+      type: object
+      required: [id, type, amount, portfolioName, allocations, executionAt, executionTimezone, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        type: { type: string, enum: [BUY, SELL] }
+        amount: { type: number }
+        portfolioName: { type: string }
+        allocations: { type: array, items: { $ref: '#/components/schemas/Allocation' } }
+        executionAt: { type: string, format: date-time }
+        executionTimezone: { const: America/New_York }
+        createdAt: { type: string, format: date-time }
