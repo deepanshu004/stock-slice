@@ -1,38 +1,24 @@
 import { randomUUID } from "node:crypto";
 import { DateTime } from "luxon";
-import { z } from "zod";
+import type { CreatePortfolioInput } from "./portfolio.js";
 
-const holdingSchema = z.object({
-  symbol: z.string().trim().min(1).max(12).regex(/^[A-Za-z0-9.-]+$/).transform((value) => value.toUpperCase()),
-  allocationPercent: z.number().positive().max(100),
-  marketPrice: z.number().positive().max(1_000_000).optional(),
-}).strict();
+export interface CreateOrderInput {
+  type: "BUY" | "SELL";
+  amount: number;
+  portfolio: CreatePortfolioInput;
+}
 
-export const portfolioSchema = z.object({
-    name: z.string().trim().min(1).max(80).optional(),
-    holdings: z.array(holdingSchema).min(1).max(50),
-}).strict().superRefine((portfolio, context) => {
-  const symbols = portfolio.holdings.map(({ symbol }) => symbol);
-  if (new Set(symbols).size !== symbols.length) {
-    context.addIssue({ code: "custom", path: ["portfolio", "holdings"], message: "Holding symbols must be unique" });
-  }
+export interface BuyOrderInput extends Omit<CreateOrderInput, "type"> {
+  type: "BUY";
+}
 
-  const allocationTotal = portfolio.holdings.reduce((total, holding) => total + holding.allocationPercent, 0);
-  if (Math.abs(allocationTotal - 100) > 0.0001) {
-    context.addIssue({ code: "custom", path: ["portfolio", "holdings"], message: "Holding allocations must total 100%" });
-  }
-});
+export interface SellOrderInput {
+  type: "SELL";
+  positions: { symbol: string; quantity: number }[];
+}
 
-export const createOrderSchema = z.object({
-  type: z.enum(["BUY", "SELL"]),
-  amount: z.number().positive().max(1_000_000_000).refine(
-    (value) => Math.abs(value * 100 - Math.round(value * 100)) < 1e-7,
-    "Amount must have no more than two decimal places",
-  ),
-  portfolio: portfolioSchema,
-}).strict();
+export type PlaceOrderInput = BuyOrderInput | SellOrderInput;
 
-export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 export type SharePrecision = number;
 
 export interface OrderAllocation {
@@ -54,6 +40,7 @@ export interface Order {
   executionAt: string;
   executionTimezone: "America/New_York";
   createdAt: string;
+  status: "SCHEDULED" | "COMPLETED";
 }
 
 export function nextMarketOpen(now: Date): string {
@@ -115,5 +102,6 @@ export function createOrder(input: CreateOrderInput, precision: SharePrecision, 
     executionAt: nextMarketOpen(now),
     executionTimezone: "America/New_York",
     createdAt: now.toISOString(),
+    status: "SCHEDULED",
   };
 }

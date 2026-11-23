@@ -25,6 +25,7 @@ export interface Order {
   executionAt: string;
   executionTimezone: string;
   createdAt: string;
+  status: "COMPLETED";
 }
 
 export interface ApiConfig {
@@ -38,4 +39,31 @@ export interface Portfolio {
   name: string;
   holdings: { symbol: string; allocationPercent: number; marketPrice?: number }[];
   createdAt: string;
+}
+
+export interface PortfolioInput {
+  name: string;
+  holdings: { symbol: string; allocationPercent: number; marketPrice?: number }[];
+}
+
+export type CreateOrderInput = {
+  type: "BUY";
+  amount: number;
+  portfolio: PortfolioInput;
+} | {
+  type: "SELL";
+  positions: { symbol: string; quantity: number }[];
+};
+
+export interface Wallet {
+  balance: number;
+  currency: "USD";
+  paymentMode: "demo";
+}
+
+export interface Position {
+  symbol: string;
+  quantity: number;
+  price: number;
+  marketValue: number;
 }

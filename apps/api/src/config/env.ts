@@ -14,3 +14,5 @@ export const config = {
     .map((origin) => origin.trim())
     .filter(Boolean),
 };
+
+export type AppConfig = typeof config;

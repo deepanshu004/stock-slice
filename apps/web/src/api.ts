@@ -1,4 +1,4 @@
-import type { ApiConfig, Order, OrderType, Portfolio } from "./types";
+import type { ApiConfig, CreateOrderInput, Order, Portfolio, PortfolioInput, Position, Wallet } from "./types";
 
 const apiBase = import.meta.env.VITE_API_URL ?? "http://localhost:4000/api";
 
@@ -38,10 +38,7 @@ export async function fetchPortfolios(): Promise<Portfolio[]> {
   return result.data;
 }
 
-export async function savePortfolio(input: {
-  name: string;
-  holdings: { symbol: string; allocationPercent: number; marketPrice?: number }[];
-}): Promise<Portfolio> {
+export async function savePortfolio(input: PortfolioInput): Promise<Portfolio> {
   const result = await request<{ data: Portfolio }>("/portfolios", {
     method: "POST",
     body: JSON.stringify(input),
@@ -49,14 +46,28 @@ export async function savePortfolio(input: {
   return result.data;
 }
 
-export async function submitOrder(input: {
-  type: OrderType;
-  amount: number;
-  portfolio: { name: string; holdings: { symbol: string; allocationPercent: number; marketPrice?: number }[] };
-}): Promise<Order> {
+export async function submitOrder(input: CreateOrderInput): Promise<Order> {
   const result = await request<{ data: Order }>("/orders", {
     method: "POST",
     body: JSON.stringify(input),
   });
+  return result.data;
+}
+
+export async function fetchWallet(): Promise<Wallet> {
+  const result = await request<{ data: Wallet }>("/wallet");
+  return result.data;
+}
+
+export async function topUpWallet(amount: number): Promise<Wallet> {
+  const result = await request<{ data: Wallet }>("/wallet/top-ups", {
+    method: "POST",
+    body: JSON.stringify({ amount, paymentMethod: "demo-card" }),
+  });
+  return result.data;
+}
+
+export async function fetchPositions(): Promise<Position[]> {
+  const result = await request<{ data: Position[] }>("/positions");
   return result.data;
 }

@@ -1,9 +1,4 @@
-export interface Portfolio {
-  id: string;
-  name: string;
-  holdings: { symbol: string; allocationPercent: number; marketPrice?: number }[];
-  createdAt: string;
-}
+import type { Portfolio } from "../domain/portfolio.js";
 
 export class PortfolioStore {
   private readonly portfolios = new Map<string, Portfolio>();
