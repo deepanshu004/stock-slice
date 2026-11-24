@@ -9,12 +9,88 @@ Stock Slice is a TypeScript portfolio-trading demo. Add funds with a simulated c
 
 ## Install and run
 
+Run all commands from the repository root (`stock-slice`, where the root `package.json` is located).
+
+### Install dependencies
+
 ```sh
 npm install
+```
+
+This installs dependencies for both the backend in `apps/api` and the frontend in `apps/web`.
+
+### Run frontend and backend together
+
+```sh
 npm run dev
 ```
 
-The dashboard is available at `http://localhost:5174` and the API at `http://localhost:4000`. The Vite app calls the API directly; set `VITE_API_URL` when the API is hosted elsewhere. To configure the API, copy `apps/api/.env.example` to `apps/api/.env` and adjust the values before starting it.
+This starts the Express backend and Vite frontend in the same terminal. Press `Ctrl+C` to stop both.
+
+| Application | Local URL |
+| --- | --- |
+| Frontend dashboard | `http://localhost:5174` |
+| Backend API base URL | `http://localhost:4000/api` |
+| Backend health check | `http://localhost:4000/api/health` |
+
+### Run frontend and backend separately
+
+Open two terminals at the repository root.
+
+**Terminal 1 — backend:**
+
+```sh
+npm run dev --workspace @stock-slice/api
+```
+
+The backend listens on port `4000` and restarts when its source files change. Open `http://localhost:4000/api/health` to check that it is running.
+
+**Terminal 2 — frontend:**
+
+```sh
+npm run dev --workspace @stock-slice/web
+```
+
+Open the Local URL printed by Vite, normally `http://localhost:5174`. The frontend calls `http://localhost:4000/api` by default, so keep the backend terminal running. If port `5174` is occupied, Vite may choose another port; the default API CORS allowlist permits frontend ports `5174` and `5175`.
+
+### Optional environment configuration
+
+The default settings work without environment files.
+
+The backend reads these variables from its process environment:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `PORT` | `4000` | Backend HTTP port |
+| `SHARE_PRECISION` | `3` | Fractional-share decimal places, from `0` to `10` |
+| `CORS_ORIGIN` | `http://localhost:5174,http://localhost:5175` | Comma-separated frontend origins allowed by CORS |
+
+Use `apps/api/.env.example` as a reference. The current backend scripts do **not** automatically load `apps/api/.env`; set variables in the terminal before starting the backend.
+
+**macOS / Linux (bash or zsh):**
+
+```sh
+PORT=4000 SHARE_PRECISION=3 CORS_ORIGIN="http://localhost:5174,http://localhost:5175" npm run dev --workspace @stock-slice/api
+```
+
+**Windows PowerShell:**
+
+```powershell
+$env:PORT = "4000"
+$env:SHARE_PRECISION = "3"
+$env:CORS_ORIGIN = "http://localhost:5174,http://localhost:5175"
+npm run dev --workspace @stock-slice/api
+```
+
+For the frontend, create `apps/web/.env.local` if you need to change its API URL:
+
+```dotenv
+VITE_API_URL=http://localhost:4000/api
+```
+
+Include the `/api` suffix. Restart Vite after changing this file, or rebuild the frontend if you are serving a compiled bundle. If you change the backend port, update `VITE_API_URL` to match. If you change the frontend origin, update the backend's `CORS_ORIGIN` too.
+
+### Try the demo
 
 The wallet starts at USD 0. Choose **Add money**, enter an amount, and use the demo card to fund it. **Buy** debits the wallet and adds the purchased shares to your positions. **Sell** displays those positions with quantity inputs and minus/plus controls; a completed sale credits its proceeds back to the wallet. Balances and positions survive a page refresh and reset when the API process restarts.
 
@@ -26,7 +102,25 @@ npm run typecheck
 npm run build
 ```
 
-API tests use Vitest and Supertest; frontend tests use Vitest, jsdom, and Testing Library. `npm run build` emits the API into `apps/api/dist` and creates the static frontend bundle in `apps/web/dist`. Run a built API with `npm run start --workspace @stock-slice/api`; serve the frontend bundle with any static web server.
+API tests use Vitest and Supertest; frontend tests use Vitest, jsdom, and Testing Library. `npm run build` emits the API into `apps/api/dist` and creates the static frontend bundle in `apps/web/dist`.
+
+### Run the built applications locally
+
+After `npm run build` completes, use two terminals at the repository root.
+
+**Terminal 1 — compiled backend:**
+
+```sh
+npm run start --workspace @stock-slice/api
+```
+
+**Terminal 2 — frontend build preview:**
+
+```sh
+npm run preview --workspace @stock-slice/web -- --port 5174 --strictPort
+```
+
+Open `http://localhost:5174`. Using port `5174` keeps the preview compatible with the default backend CORS settings; stop the frontend dev server first to free that port. Vite preview is for local build verification; serve `apps/web/dist` with a static web server when deploying.
 
 ## API source structure
 
