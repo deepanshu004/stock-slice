@@ -92,6 +92,9 @@ Include the `/api` suffix. Restart Vite after changing this file, or rebuild the
 
 ### Try the demo
 
+<img width="1408" height="881" alt="image" src="https://github.com/user-attachments/assets/7322f100-b326-49e8-b3fe-1f30003b8f1e" />
+
+
 The wallet starts at USD 0. Choose **Add money**, enter an amount, and use the demo card to fund it. **Buy** debits the wallet and adds the purchased shares to your positions. **Sell** displays those positions with quantity inputs and minus/plus controls; a completed sale credits its proceeds back to the wallet. Balances and positions survive a page refresh and reset when the API process restarts.
 
 ## Tests and builds
