@@ -20,7 +20,7 @@ export function OrderHistory({ orders, refreshing, disabled, onRefresh, onSelect
         <span className="history-portfolio">{order.portfolioName}</span><b className="history-amount">{currency.format(order.amount)}</b>
         <span className="holding-stack">{order.allocations.slice(0, 3).map((allocation) => <i key={allocation.symbol}>{allocation.symbol.slice(0, 1)}</i>)}<small>{order.allocations.length} assets</small></span>
         <span className="history-date">{formatDate(order.executionAt, { timeZone: order.executionTimezone, month: "short", day: "numeric" })}<small>{formatDate(order.executionAt, { timeZone: order.executionTimezone, hour: "numeric", minute: "2-digit", timeZoneName: "short" })}</small></span>
-        <span className="history-date">{formatDate(order.createdAt, { month: "short", day: "numeric" })}<small>{formatDate(order.createdAt, { hour: "numeric", minute: "2-digit" })} ET</small></span>
+        <span className="history-date">{formatDate(order.createdAt, { month: "short", day: "numeric" })}<small>{formatDate(order.createdAt, { hour: "numeric", minute: "2-digit" })} ET</small>{order.simulationDate && <small className="test-date-note">Test date: {order.simulationDate}</small>}</span>
         <span className="history-status"><i />{order.status === "SCHEDULED" ? "Scheduled" : "Completed"}</span>
       </button>)}
     </div>}

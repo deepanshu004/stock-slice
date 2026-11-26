@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { AccountPosition } from "./account.js";
-import { nextMarketOpen, type Order } from "./order.js";
+import { orderExecution, type Order } from "./order.js";
 
 export function createSellOrder(positions: AccountPosition[], now = new Date()): Order {
   const proceedsCents = positions.map(({ quantity, price }) => Math.round(quantity * price * 100));
@@ -25,9 +25,8 @@ export function createSellOrder(positions: AccountPosition[], now = new Date()):
         unallocatedAmount: 0,
       };
     }),
-    executionAt: nextMarketOpen(now),
+    ...orderExecution(now),
     executionTimezone: "America/New_York",
     createdAt,
-    status: "SCHEDULED",
   };
 }

@@ -26,6 +26,7 @@ export interface Order {
   executionTimezone: string;
   createdAt: string;
   status: "SCHEDULED" | "COMPLETED";
+  simulationDate?: string;
 }
 
 export interface ApiConfig {
@@ -50,9 +51,11 @@ export type CreateOrderInput = {
   type: "BUY";
   amount: number;
   portfolio: PortfolioInput;
+  simulationDate?: string;
 } | {
   type: "SELL";
   positions: { symbol: string; quantity: number }[];
+  simulationDate?: string;
 };
 
 export interface Wallet {

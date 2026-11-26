@@ -1,6 +1,25 @@
 import { describe, expect, it } from "vitest";
 import { createPlaceOrderSchema } from "./order.schema.js";
 
+describe("test order date validation", () => {
+  const requests = [
+    { type: "BUY", amount: 100, portfolio: { holdings: [{ symbol: "AAPL", allocationPercent: 100 }] } },
+    { type: "SELL", positions: [{ symbol: "AAPL", quantity: 0.1 }] },
+  ];
+
+  it.each(["2026-11-28", "2026-11-29", "2028-02-29"])("accepts the calendar date %s for buys and sells", (simulationDate) => {
+    for (const input of requests) {
+      expect(createPlaceOrderSchema(3).parse({ ...input, simulationDate }).simulationDate).toBe(simulationDate);
+    }
+  });
+
+  it.each(["", "2026-02-29", "2026-02-30", "2026-11-31", "2026-13-01", "2026-11-28T12:00:00Z", "11/28/2026", null, 20261128])("rejects invalid test date %j for buys and sells", (simulationDate) => {
+    for (const input of requests) {
+      expect(createPlaceOrderSchema(3).safeParse({ ...input, simulationDate }).success).toBe(false);
+    }
+  });
+});
+
 describe("quantity-based sell validation", () => {
   it("rejects buy amounts below a cent and hidden fractional cents", () => {
     for (const amount of [1e-12, 1.00000000001]) {

@@ -28,7 +28,17 @@ function orderFixture(type: "BUY" | "SELL"): Order {
   };
 }
 
-function mockDeskApi(options: { balance?: number; positions?: TestPosition[] } = {}) {
+const simulationFixtures: Record<string, Pick<Order, "status" | "executionAt" | "createdAt">> = {
+  "2026-11-21": { status: "SCHEDULED", createdAt: "2026-11-21T17:00:00.000Z", executionAt: "2026-11-23T14:30:00.000Z" },
+  "2026-11-22": { status: "SCHEDULED", createdAt: "2026-11-22T17:00:00.000Z", executionAt: "2026-11-23T14:30:00.000Z" },
+  "2026-11-23": { status: "COMPLETED", createdAt: "2026-11-23T17:00:00.000Z", executionAt: "2026-11-23T17:00:00.000Z" },
+};
+
+function mockDeskApi(options: {
+  balance?: number;
+  positions?: TestPosition[];
+  orderTiming?: Pick<Order, "status" | "executionAt" | "createdAt">;
+} = {}) {
   const state = {
     wallet: { balance: options.balance ?? 0, currency: "USD" as const, paymentMode: "demo" as const },
     positions: options.positions ?? [],
@@ -58,8 +68,14 @@ function mockDeskApi(options: { balance?: number; positions?: TestPosition[] } =
     if (path.endsWith("/portfolios")) return Response.json({ data: state.portfolios, count: state.portfolios.length });
     if (path.endsWith("/orders") && init?.method === "POST") {
       if (state.orderError) return Response.json({ error: { message: state.orderError } }, { status: 409 });
-      const input = JSON.parse(String(init.body)) as { type: "BUY" | "SELL" };
-      const order = orderFixture(input.type);
+      const input = JSON.parse(String(init.body)) as { type: "BUY" | "SELL"; simulationDate?: string };
+      const timing = input.simulationDate ? simulationFixtures[input.simulationDate] : options.orderTiming;
+      if (input.simulationDate && !timing) throw new Error(`Unexpected test date ${input.simulationDate}`);
+      const order = {
+        ...orderFixture(input.type), ...timing,
+        id: `${input.type.toLowerCase()}-order-${state.orders.length + 1}`,
+        ...(input.simulationDate ? { simulationDate: input.simulationDate } : {}),
+      };
       state.orders = [order, ...state.orders];
       if (input.type === "BUY") {
         state.wallet.balance = 400;
@@ -94,7 +110,7 @@ afterEach(() => {
 });
 
 describe("order desk", () => {
-  it("adds demo funds, buys the entered portfolio, and sells an owned quantity", async () => {
+  it("adds demo funds and schedules weekend buy and sell orders for Monday market open", async () => {
     mockDeskApi();
     render(<App />);
     await screen.findByText(/Connected to API/);
@@ -149,6 +165,107 @@ describe("order desk", () => {
     expect(postedBodies("/orders")[1]).toEqual({ type: "SELL", positions: [{ symbol: "AAPL", quantity: 0.1 }] });
     expect(screen.getByLabelText("Sell quantity AAPL")).toHaveAttribute("max", "0.5");
     expect(screen.getAllByText("Scheduled")).toHaveLength(2);
+  });
+
+  it.each([
+    { type: "BUY", createdAt: "2026-11-23T12:00:00.000Z", day: "Monday, Nov 23", date: "Nov 23", time: "7:00 AM" },
+    { type: "SELL", createdAt: "2026-11-28T01:15:00.000Z", day: "Friday, Nov 27", date: "Nov 27", time: "8:15 PM" },
+  ] as const)("shows instant weekday $type execution from the order response", async ({ type, createdAt, day, date, time }) => {
+    mockDeskApi({
+      balance: 500,
+      positions: [{ symbol: "AAPL", quantity: 0.6, price: 100, marketValue: 60 }],
+      orderTiming: { status: "COMPLETED", executionAt: createdAt, createdAt },
+    });
+    render(<App />);
+    await screen.findByText(/Connected to API/);
+    if (type === "BUY") {
+      fireEvent.change(screen.getByLabelText("Investment amount"), { target: { value: "100" } });
+    } else {
+      fireEvent.click(screen.getByRole("button", { name: "SELL" }));
+      fireEvent.change(screen.getByLabelText("Sell quantity AAPL"), { target: { value: "0.1" } });
+    }
+    fireEvent.click(screen.getByRole("button", { name: type === "BUY" ? "Buy" : "Sell" }));
+    expect(await screen.findByText(`${type === "BUY" ? "Buy" : "Sell"} order completed`)).toBeInTheDocument();
+    const execution = screen.getByRole("group", { name: "Demo execution" });
+    expect(execution).toHaveTextContent(day);
+    expect(execution).toHaveTextContent(`${time} EST · Completed in your demo account`);
+    expect(execution).toHaveTextContent("COMPLETED");
+    const history = screen.getByRole("button", { name: new RegExp(`${type} order`) });
+    expect(within(history).getAllByText(date)).toHaveLength(2);
+    expect(history).toHaveTextContent(`${time} EST`);
+    expect(history).toHaveTextContent(`${time} ET`);
+    expect(within(history).getByText("Completed")).toBeInTheDocument();
+    expect(screen.queryByText("Scheduled")).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Execution schedule" })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    { type: "BUY", simulationDate: "2026-11-21", status: "SCHEDULED", time: "9:30 AM EST" },
+    { type: "SELL", simulationDate: "2026-11-22", status: "SCHEDULED", time: "9:30 AM EST" },
+    { type: "BUY", simulationDate: "2026-11-23", status: "COMPLETED", time: "12:00 PM EST" },
+    { type: "SELL", simulationDate: "2026-11-23", status: "COMPLETED", time: "12:00 PM EST" },
+  ] as const)("tests $type orders on selected date $simulationDate", async ({ type, simulationDate, status, time }) => {
+    mockDeskApi({ balance: 500, positions: [{ symbol: "AAPL", quantity: 0.6, price: 100, marketValue: 60 }] });
+    render(<App />);
+    const dateInput = screen.getByLabelText("Test order date (New York)");
+    expect(dateInput).toBeDisabled();
+    await screen.findByText(/Connected to API/);
+    expect(dateInput).toHaveValue("");
+    expect(screen.queryByRole("button", { name: "Use current time" })).not.toBeInTheDocument();
+    fireEvent.change(dateInput, { target: { value: simulationDate } });
+    expect(dateInput).toHaveValue(simulationDate);
+    expect(screen.getByRole("button", { name: "Use current time" })).toBeEnabled();
+    if (type === "BUY") {
+      fireEvent.change(screen.getByLabelText("Investment amount"), { target: { value: "100" } });
+    } else {
+      fireEvent.click(screen.getByRole("button", { name: "SELL" }));
+      fireEvent.change(screen.getByLabelText("Sell quantity AAPL"), { target: { value: "0.1" } });
+    }
+    fireEvent.click(screen.getByRole("button", { name: type === "BUY" ? "Buy" : "Sell" }));
+    const scheduled = status === "SCHEDULED";
+    expect(await screen.findByText(`${type === "BUY" ? "Buy" : "Sell"} order ${scheduled ? "scheduled" : "completed"}`)).toBeInTheDocument();
+    expect(postedBodies("/orders")).toHaveLength(1);
+    expect(postedBodies("/orders")[0]).toMatchObject({ type, simulationDate });
+    const execution = screen.getByRole("group", { name: scheduled ? "Execution schedule" : "Demo execution" });
+    expect(execution).toHaveTextContent("Monday, Nov 23");
+    expect(execution).toHaveTextContent(time);
+    expect(execution).toHaveTextContent(status);
+    expect(execution).toHaveTextContent(`Test date: ${simulationDate} (New York, noon)`);
+    const history = screen.getByRole("button", { name: new RegExp(`${type} order`) });
+    expect(history).toHaveTextContent(`Test date: ${simulationDate}`);
+    expect(history).toHaveTextContent("12:00 PM ET");
+    expect(within(history).getByText(scheduled ? "Scheduled" : "Completed")).toBeInTheDocument();
+  });
+
+  it("clears the test date and result, then omits simulationDate when using current time", async () => {
+    const createdAt = "2026-11-23T17:00:00.000Z";
+    mockDeskApi({ balance: 500, orderTiming: { status: "COMPLETED", createdAt, executionAt: createdAt } });
+    render(<App />);
+    await screen.findByText(/Connected to API/);
+    const dateInput = screen.getByLabelText("Test order date (New York)");
+    fireEvent.change(dateInput, { target: { value: "2026-11-21" } });
+    fireEvent.change(screen.getByLabelText("Investment amount"), { target: { value: "100" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buy" }));
+    await screen.findByText("Buy order scheduled");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Use current time" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Use current time" }));
+    expect(dateInput).toHaveValue("");
+    expect(dateInput).toHaveFocus();
+    expect(screen.queryByRole("button", { name: "Use current time" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Execution schedule" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Buy order scheduled")).not.toBeInTheDocument();
+    const simulatedHistory = screen.getByRole("button", { name: /BUY order/ });
+    expect(simulatedHistory).toHaveTextContent("Test date: 2026-11-21");
+    fireEvent.click(simulatedHistory);
+    expect(screen.getByRole("group", { name: "Execution schedule" })).toHaveTextContent("Test date: 2026-11-21");
+    expect(dateInput).toHaveValue("");
+
+    fireEvent.click(screen.getByRole("button", { name: "Buy" }));
+    await screen.findByText("Buy order completed");
+    expect(postedBodies("/orders")).toHaveLength(2);
+    expect(postedBodies("/orders")[0]).toHaveProperty("simulationDate", "2026-11-21");
+    expect(postedBodies("/orders")[1]).not.toHaveProperty("simulationDate");
+    expect(screen.getByRole("group", { name: "Demo execution" })).not.toHaveTextContent("Test date:");
   });
 
   it("prevents buying without enough wallet funds", async () => {
@@ -212,14 +329,14 @@ describe("order desk", () => {
   it("keeps completed orders marked completed in history and the preview", async () => {
     const state = mockDeskApi();
     const order = orderFixture("BUY");
-    state.orders = [{ ...order, status: "COMPLETED", executionAt: order.createdAt }];
+    state.orders = [{ ...order, status: "COMPLETED", executionAt: "2026-11-23T12:00:00.000Z", createdAt: "2026-11-23T12:00:00.000Z" }];
     render(<App />);
     await screen.findByText(/Connected to API/);
     const history = screen.getByRole("button", { name: /BUY order/ });
     expect(within(history).getByText("Completed")).toBeInTheDocument();
     fireEvent.click(history);
     const execution = screen.getByRole("group", { name: "Demo execution" });
-    expect(execution).toHaveTextContent("Saturday, Nov 21");
+    expect(execution).toHaveTextContent("Monday, Nov 23");
     expect(execution).toHaveTextContent("7:00 AM EST · Completed in your demo account");
     expect(execution).toHaveTextContent("COMPLETED");
     expect(screen.queryByRole("group", { name: "Execution schedule" })).not.toBeInTheDocument();

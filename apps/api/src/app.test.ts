@@ -35,13 +35,77 @@ afterEach(() => {
 
 describe("orders API", () => {
   it.each([
-    { placedAt: "2026-11-21T16:00:00.000Z", executionAt: "2026-11-23T14:30:00.000Z" },
-    { placedAt: "2026-11-22T16:00:00.000Z", executionAt: "2026-11-23T14:30:00.000Z" },
-    { placedAt: "2026-11-20T21:00:00.000Z", executionAt: "2026-11-23T14:30:00.000Z" },
-    { placedAt: "2026-11-23T12:00:00.000Z", executionAt: "2026-11-23T14:30:00.000Z" },
-    { placedAt: "2026-03-07T16:00:00.000Z", executionAt: "2026-03-09T13:30:00.000Z" },
-    { placedAt: "2026-10-31T16:00:00.000Z", executionAt: "2026-11-02T14:30:00.000Z" },
-  ])("preserves the market-open schedule for buys, sells, and history placed at $placedAt", async ({ placedAt, executionAt }) => {
+    { simulationDate: "2026-11-28", createdAt: "2026-11-28T17:00:00.000Z", executionAt: "2026-11-30T14:30:00.000Z", status: "SCHEDULED" },
+    { simulationDate: "2026-11-29", createdAt: "2026-11-29T17:00:00.000Z", executionAt: "2026-11-30T14:30:00.000Z", status: "SCHEDULED" },
+    { simulationDate: "2026-11-26", createdAt: "2026-11-26T17:00:00.000Z", executionAt: "2026-11-26T17:00:00.000Z", status: "COMPLETED" },
+    { simulationDate: "2026-03-07", createdAt: "2026-03-07T17:00:00.000Z", executionAt: "2026-03-09T13:30:00.000Z", status: "SCHEDULED" },
+    { simulationDate: "2026-10-31", createdAt: "2026-10-31T16:00:00.000Z", executionAt: "2026-11-02T14:30:00.000Z", status: "SCHEDULED" },
+  ])("uses the selected New York test date $simulationDate for buys, sells, and history", async ({ simulationDate, createdAt, executionAt, status }) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-26T06:12:00.000Z"));
+    await addMoney();
+    const bought = await request(app).post("/api/orders").send({ ...orderRequest, simulationDate }).expect(201);
+    const sold = await request(app).post("/api/orders").send({
+      type: "SELL", positions: [{ symbol: "AAPL", quantity: 0.1 }], simulationDate,
+    }).expect(201);
+    for (const result of [bought, sold]) {
+      expect(result.body.data).toMatchObject({ simulationDate, status, createdAt, executionAt, executionTimezone: "America/New_York" });
+      const retrieved = await request(app).get(`/api/orders/${result.body.data.id}`).expect(200);
+      expect(retrieved.body.data).toEqual(result.body.data);
+    }
+    const history = await request(app).get("/api/orders").expect(200);
+    expect(history.body.data).toEqual([sold.body.data, bought.body.data]);
+    await request(app).get("/api/wallet").expect(200, {
+      data: { balance: 915, currency: "USD", paymentMode: "demo" },
+    });
+    const positions = await request(app).get("/api/positions").expect(200);
+    expect(positions.body.data).toEqual(expect.arrayContaining([
+      { symbol: "AAPL", quantity: 0.3, price: 150, marketValue: 45 },
+    ]));
+  });
+
+  it("uses actual server time for an order without a test date after a simulated order", async () => {
+    const now = "2026-11-26T06:12:00.000Z";
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(now));
+    await addMoney();
+    await request(app).post("/api/orders").send({ ...orderRequest, simulationDate: "2026-11-28" }).expect(201);
+    const created = await request(app).post("/api/orders").send(orderRequest).expect(201);
+    expect(created.body.data).toMatchObject({ status: "COMPLETED", createdAt: now, executionAt: now });
+    expect(created.body.data).not.toHaveProperty("simulationDate");
+  });
+
+  it("rejects invalid test dates without changing funds, positions, or history", async () => {
+    await addMoney();
+    for (const input of [orderRequest, { type: "SELL", positions: [{ symbol: "AAPL", quantity: 0.1 }] }]) {
+      const result = await request(app).post("/api/orders").send({ ...input, simulationDate: "2026-02-30" }).expect(400);
+      expect(result.body.error.code).toBe("VALIDATION_ERROR");
+      expect(result.body.error.details).toEqual(expect.arrayContaining([
+        expect.objectContaining({ path: "simulationDate" }),
+      ]));
+    }
+    await request(app).get("/api/wallet").expect(200, {
+      data: { balance: 1000, currency: "USD", paymentMode: "demo" },
+    });
+    await request(app).get("/api/positions").expect(200, { data: [], count: 0 });
+    await request(app).get("/api/orders").expect(200, { data: [], count: 0 });
+  });
+
+  it.each([
+    { placedAt: "2026-11-23T12:00:00.000Z", executionAt: "2026-11-23T12:00:00.000Z", status: "COMPLETED" },
+    { placedAt: "2026-11-24T14:30:00.000Z", executionAt: "2026-11-24T14:30:00.000Z", status: "COMPLETED" },
+    { placedAt: "2026-11-25T15:00:00.000Z", executionAt: "2026-11-25T15:00:00.000Z", status: "COMPLETED" },
+    { placedAt: "2026-11-26T06:12:00.000Z", executionAt: "2026-11-26T06:12:00.000Z", status: "COMPLETED" },
+    { placedAt: "2026-11-20T22:00:00.000Z", executionAt: "2026-11-20T22:00:00.000Z", status: "COMPLETED" },
+    { placedAt: "2026-11-21T02:00:00.000Z", executionAt: "2026-11-21T02:00:00.000Z", status: "COMPLETED" },
+    { placedAt: "2026-11-23T05:00:00.000Z", executionAt: "2026-11-23T05:00:00.000Z", status: "COMPLETED" },
+    { placedAt: "2026-11-21T05:00:00.000Z", executionAt: "2026-11-23T14:30:00.000Z", status: "SCHEDULED" },
+    { placedAt: "2026-11-21T16:00:00.000Z", executionAt: "2026-11-23T14:30:00.000Z", status: "SCHEDULED" },
+    { placedAt: "2026-11-22T16:00:00.000Z", executionAt: "2026-11-23T14:30:00.000Z", status: "SCHEDULED" },
+    { placedAt: "2026-11-23T02:00:00.000Z", executionAt: "2026-11-23T14:30:00.000Z", status: "SCHEDULED" },
+    { placedAt: "2026-03-07T16:00:00.000Z", executionAt: "2026-03-09T13:30:00.000Z", status: "SCHEDULED" },
+    { placedAt: "2026-10-31T16:00:00.000Z", executionAt: "2026-11-02T14:30:00.000Z", status: "SCHEDULED" },
+  ])("preserves weekday execution or weekend scheduling for buys, sells, and history placed at $placedAt", async ({ placedAt, executionAt, status }) => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date(placedAt));
     await addMoney();
@@ -52,7 +116,7 @@ describe("orders API", () => {
 
     for (const result of [bought, sold]) {
       expect(result.body.data).toMatchObject({
-        status: "SCHEDULED", executionAt,
+        status, executionAt,
         executionTimezone: "America/New_York", createdAt: placedAt,
       });
       const retrieved = await request(app).get(`/api/orders/${result.body.data.id}`).expect(200);
@@ -223,9 +287,12 @@ describe("demo wallet and owned positions", () => {
   });
 
   it("funds a buy, sells part of an owned stock, and closes the remaining positions", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-26T06:12:00.000Z"));
     await addMoney(app, 500);
     const bought = await request(app).post("/api/orders").send(orderRequest).expect(201);
-    expect(bought.body.data.status).toBe("SCHEDULED");
+    expect(bought.body.data.status).toBe("COMPLETED");
+    expect(bought.body.data.executionAt).toBe(bought.body.data.createdAt);
     await request(app).get("/api/wallet").expect(200, {
       data: { balance: 400, currency: "USD", paymentMode: "demo" },
     });
@@ -239,7 +306,8 @@ describe("demo wallet and owned positions", () => {
     const partial = await request(app).post("/api/orders").send({
       type: "SELL", positions: [{ symbol: " aapl ", quantity: 0.15 }],
     }).expect(201);
-    expect(partial.body.data).toMatchObject({ type: "SELL", amount: 22.5, status: "SCHEDULED" });
+    expect(partial.body.data).toMatchObject({ type: "SELL", amount: 22.5, status: "COMPLETED" });
+    expect(partial.body.data.executionAt).toBe(partial.body.data.createdAt);
     expect(partial.body.data.allocations[0]).toMatchObject({ symbol: "AAPL", shares: 0.15, price: 150 });
     const remaining = await request(app).get("/api/positions").expect(200);
     expect(remaining.body.data).toEqual(expect.arrayContaining([

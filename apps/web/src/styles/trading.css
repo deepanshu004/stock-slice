@@ -43,6 +43,75 @@
   margin-top: 0;
 }
 
+.test-date-field {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 18px;
+  padding: 11px;
+  border: 1px solid #e2ebe2;
+  border-radius: 4px;
+  background: #f7faf6;
+}
+
+.test-date-heading,
+.test-date-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.test-date-heading {
+  justify-content: space-between;
+}
+
+.test-date-heading label {
+  color: #58665d;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.test-date-heading > span {
+  color: #89958d;
+  font-size: 9px;
+}
+
+.test-date-controls {
+  flex-wrap: wrap;
+}
+
+.test-date-controls .input-wrap {
+  flex: 1 1 160px;
+  min-width: 0;
+  background: #fff;
+}
+
+.current-time-button {
+  border: 0;
+  background: transparent;
+  color: #44815c;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 6px 0;
+  cursor: pointer;
+}
+
+.current-time-button:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+.test-date-field p {
+  margin: 0;
+  color: #7e8b82;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.execution-card .test-date-note,
+.history-date .test-date-note {
+  color: #926334;
+}
+
 .side-option:disabled {
   cursor: not-allowed;
 }

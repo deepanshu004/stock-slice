@@ -3,6 +3,8 @@ import { shareQuantityUnits } from "../domain/share-quantity.js";
 import { portfolioSchema } from "./portfolio.schema.js";
 import { moneyAmountSchema } from "./money.schema.js";
 
+const simulationDateSchema = z.iso.date("Test order date must be a valid calendar date in YYYY-MM-DD format").optional();
+
 export const createOrderSchema = z.object({
   type: z.enum(["BUY", "SELL"]),
   amount: z.number().positive().max(1_000_000_000).refine(
@@ -10,6 +12,7 @@ export const createOrderSchema = z.object({
     "Amount must have no more than two decimal places",
   ),
   portfolio: portfolioSchema,
+  simulationDate: simulationDateSchema,
 }).strict();
 
 export const buyOrderSchema = createOrderSchema.extend({ type: z.literal("BUY"), amount: moneyAmountSchema });
@@ -17,6 +20,7 @@ export const buyOrderSchema = createOrderSchema.extend({ type: z.literal("BUY"),
 export function createSellOrderSchema(sharePrecision: number) {
   return z.object({
     type: z.literal("SELL"),
+    simulationDate: simulationDateSchema,
     positions: z.array(z.object({
       symbol: z.string().trim().min(1).max(12).regex(/^[A-Za-z0-9.-]+$/).transform((value) => value.toUpperCase()),
       quantity: z.number().positive().refine((value) => {

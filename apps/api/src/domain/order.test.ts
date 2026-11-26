@@ -25,15 +25,25 @@ describe("createOrder", () => {
 
     const order = createOrder(input, 3, new Date("2026-11-23T12:00:00.000Z"));
     expect(order).toMatchObject({
-      status: "SCHEDULED",
+      status: "COMPLETED",
       createdAt: "2026-11-23T12:00:00.000Z",
-      executionAt: "2026-11-23T14:30:00.000Z",
+      executionAt: "2026-11-23T12:00:00.000Z",
       executionTimezone: "America/New_York",
     });
     expect(order.allocations.map(({ price }) => price)).toEqual([120, 100]);
     expect(order.allocations.map(({ shares }) => shares)).toEqual([0.5, 0.4]);
     expect(order.allocations.reduce((sum, allocation) => sum + allocation.amount, 0)).toBe(100);
     expect(order.allocations[0]?.symbol).toBe("AAPL");
+  });
+
+  it("schedules a weekend buy for Monday opening", () => {
+    const order = createOrder(validInput, 3, new Date("2026-11-21T16:00:00.000Z"));
+    expect(order).toMatchObject({
+      status: "SCHEDULED",
+      createdAt: "2026-11-21T16:00:00.000Z",
+      executionAt: "2026-11-23T14:30:00.000Z",
+      executionTimezone: "America/New_York",
+    });
   });
 
   it("rounds down shares at the configured precision so an allocation is not exceeded", () => {

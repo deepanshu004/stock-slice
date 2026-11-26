@@ -31,6 +31,7 @@ export function useTradingDesk() {
   const [portfolioName, setPortfolioName] = useState("Core growth");
   const [amount, setAmount] = useState("1000");
   const [type, setType] = useState<OrderType>("BUY");
+  const [simulationDate, setSimulationDate] = useState("");
   const [holdings, setHoldings] = useState(initialHoldings);
   const [sellQuantities, setSellQuantities] = useState<Record<string, string>>({});
   const [lastOrder, setLastOrder] = useState<Order | null>(null);
@@ -120,6 +121,11 @@ export function useTradingDesk() {
   function changeSide(side: OrderType) {
     setType(side);
     setError("");
+    resetResult();
+  }
+
+  function changeSimulationDate(value: string) {
+    setSimulationDate(value);
     resetResult();
   }
 
@@ -213,7 +219,7 @@ export function useTradingDesk() {
       if (input.type === "BUY" && input.amount > wallet.balance) throw new Error("Insufficient wallet balance. Add money before buying stocks.");
       if (input.type === "SELL" && !input.positions.length) throw new Error("Choose a quantity of stock to sell.");
       setSubmitting(true);
-      const order = await submitOrder(input);
+      const order = await submitOrder({ ...input, ...(simulationDate ? { simulationDate } : {}) });
       setLastOrder(order);
       setOrders((current) => [order, ...current.filter(({ id }) => id !== order.id)]);
       setNotice(`${order.type === "BUY" ? "Buy" : "Sell"} order ${order.status === "SCHEDULED" ? "scheduled" : "completed"}`);
@@ -260,7 +266,7 @@ export function useTradingDesk() {
 
   return {
     config, orders, portfolios, wallet, positions, positionsReady, portfolioName, setPortfolioName,
-    amount, setAmount, type, changeSide, holdings, lastOrder, setLastOrder, loading, submitting,
+    amount, setAmount, type, changeSide, simulationDate, changeSimulationDate, holdings, lastOrder, setLastOrder, loading, submitting,
     refreshing, savingPortfolio, error, setError, notice, setNotice, allocationTotal, investedTotal,
     sellQuantities, selectedPositions, sellProceeds, insufficientBalance, busy, canSubmit,
     updateHolding, addHolding, removeHolding, updateSellQuantity, stepSellQuantity,

@@ -17,7 +17,9 @@ export interface SellOrderInput {
   positions: { symbol: string; quantity: number }[];
 }
 
-export type PlaceOrderInput = BuyOrderInput | SellOrderInput;
+export type PlaceOrderInput = (BuyOrderInput | SellOrderInput) & {
+  simulationDate?: string | undefined;
+};
 
 export type SharePrecision = number;
 
@@ -41,6 +43,7 @@ export interface Order {
   executionTimezone: "America/New_York";
   createdAt: string;
   status: "SCHEDULED" | "COMPLETED";
+  simulationDate?: string;
 }
 
 export function nextMarketOpen(now: Date): string {
@@ -53,6 +56,14 @@ export function nextMarketOpen(now: Date): string {
   }
 
   return marketOpen.toUTC().toISO() ?? "";
+}
+
+export function orderExecution(now: Date): Pick<Order, "executionAt" | "status"> {
+  const weekend = DateTime.fromJSDate(now, { zone: "America/New_York" }).weekday > 5;
+  return {
+    executionAt: weekend ? nextMarketOpen(now) : now.toISOString(),
+    status: weekend ? "SCHEDULED" : "COMPLETED",
+  };
 }
 
 export function createOrder(input: CreateOrderInput, precision: SharePrecision, now = new Date()): Order {
@@ -99,9 +110,8 @@ export function createOrder(input: CreateOrderInput, precision: SharePrecision, 
     amount: totalCents / 100,
     portfolioName: input.portfolio.name ?? "Untitled portfolio",
     allocations,
-    executionAt: nextMarketOpen(now),
+    ...orderExecution(now),
     executionTimezone: "America/New_York",
     createdAt: now.toISOString(),
-    status: "SCHEDULED",
   };
 }

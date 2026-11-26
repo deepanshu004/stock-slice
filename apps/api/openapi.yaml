@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: Stock Slice API
   version: 1.0.0
-  description: In-memory demo wallet, portfolio allocation, and owned-stock trading. New orders are scheduled for the next weekday opening at 09:30 America/New_York, while demo wallet and position changes happen immediately on placement. No real cards are charged or trades routed. Exchange holidays and automatic order completion are not implemented.
+  description: In-memory demo wallet, portfolio allocation, and owned-stock trading. Orders placed Monday through Friday in America/New_York complete immediately at any time of day. Saturday and Sunday orders are scheduled for Monday at 09:30 New York time. Demo wallet and position changes happen immediately for all orders. No real cards are charged or trades routed. Exchange holidays and automatic completion of scheduled weekend orders are not implemented.
 servers:
   - url: http://localhost:4000
 paths:
@@ -128,7 +128,21 @@ paths:
                   count: { type: integer }
     post:
       summary: Place a simulated buy or sell and update the wallet and positions
-      description: Buys debit the full requested amount and add allocated shares. Sells take owned quantities and credit proceeds at each position's stored reference price. Demo account changes happen immediately on placement. Both order types are returned as SCHEDULED with executionAt set to the next weekday opening at 09:30 America/New_York. Weekday orders before opening use the same day; orders at or after opening use the next weekday; weekend orders use Monday. Daylight-saving changes are handled by the IANA timezone, but exchange holidays are not modeled. No background worker executes orders or automatically changes their status to COMPLETED. Rejected orders leave balances, positions, and history unchanged.
+      description: >-
+        Buys debit the full requested amount and add allocated shares. Sells take owned quantities
+        and credit proceeds at each position's stored reference price. Demo account changes happen
+        immediately on placement for all orders. Both order types complete immediately Monday
+        through Friday at any time of day, returning COMPLETED with executionAt equal to createdAt.
+        Saturday and Sunday orders return SCHEDULED with executionAt set to the following Monday
+        at 09:30. The local weekday and Monday opening are determined in America/New_York, with
+        daylight-saving changes handled by the IANA timezone. An optional valid YYYY-MM-DD
+        simulationDate sets the effective order time to noon in New York on that date, for both
+        createdAt and the scheduling decision. The chosen simulationDate is stored and returned;
+        omitting it uses actual server time. Empty or invalid dates are rejected. Test-date orders
+        affect the same demo account and history as ordinary orders. Exchange holidays are excluded;
+        every Monday through Friday uses immediate execution. No background worker routes trades
+        or automatically completes scheduled weekend orders. Rejected orders leave balances,
+        positions, and history unchanged.
       requestBody:
         required: true
         content:
@@ -136,7 +150,7 @@ paths:
             schema: { $ref: '#/components/schemas/CreateOrderRequest' }
       responses:
         '201':
-          description: Scheduled simulated order with demo account changes applied
+          description: Completed weekday or scheduled weekend order with demo account changes applied
           content:
             application/json:
               schema:
@@ -260,12 +274,22 @@ components:
         type: { const: BUY }
         amount: { type: number, exclusiveMinimum: 0, maximum: 1000000000, multipleOf: 0.01 }
         portfolio: { $ref: '#/components/schemas/PortfolioInput' }
+        simulationDate:
+          type: string
+          format: date
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          description: Optional valid YYYY-MM-DD calendar date for demo testing. Uses noon America/New_York on this date as createdAt and the scheduling clock. Empty or invalid dates are rejected; omit to use actual server time. Updates the same demo account and history as ordinary orders.
     SellOrderRequest:
       type: object
       additionalProperties: false
       required: [type, positions]
       properties:
         type: { const: SELL }
+        simulationDate:
+          type: string
+          format: date
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          description: Optional valid YYYY-MM-DD calendar date for demo testing. Uses noon America/New_York on this date as createdAt and the scheduling clock. Empty or invalid dates are rejected; omit to use actual server time. Updates the same demo account and history as ordinary orders.
         positions:
           type: array
           minItems: 1
@@ -298,13 +322,21 @@ components:
         status:
           type: string
           enum: [SCHEDULED, COMPLETED]
-          description: Newly placed orders are SCHEDULED. COMPLETED is supported for compatibility; this demo does not automatically complete scheduled orders.
+          description: COMPLETED when the effective order time is Monday through Friday in America/New_York at any time of day. SCHEDULED for Saturday and Sunday; this demo does not automatically complete them when Monday's opening arrives. With simulationDate, the effective time is noon on that date.
+        simulationDate:
+          type: string
+          format: date
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          description: Chosen demo test date, echoed and stored only when supplied in the request. The effective createdAt and scheduling clock use noon America/New_York on this date. These orders update the same demo account and history as ordinary orders.
         amount: { type: number }
         portfolioName: { type: string }
         allocations: { type: array, items: { $ref: '#/components/schemas/Allocation' } }
         executionAt:
           type: string
           format: date-time
-          description: Scheduled weekday opening at 09:30 America/New_York, returned in UTC. Uses the same weekday before opening and the next weekday at or after opening, skipping Saturday and Sunday. Daylight-saving changes are handled; exchange holidays are not modeled.
+          description: Equal to createdAt when the effective order time is Monday through Friday at any time of day in America/New_York. For Saturday and Sunday, the following Monday at 09:30 New York time. With simulationDate, the effective time is noon on that date. Returned in UTC; the IANA timezone handles the local weekday and daylight-saving changes. Exchange holidays are not modeled.
         executionTimezone: { const: America/New_York }
-        createdAt: { type: string, format: date-time }
+        createdAt:
+          type: string
+          format: date-time
+          description: Effective order time in UTC. Normally the actual server time at submission; when simulationDate is supplied, noon in America/New_York on that chosen date rather than the actual submission time.

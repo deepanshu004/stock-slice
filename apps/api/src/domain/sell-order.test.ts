@@ -2,6 +2,18 @@ import { describe, expect, it } from "vitest";
 import { createSellOrder } from "./sell-order.js";
 
 describe("quantity-based sell order", () => {
+  it("completes a weekday sell immediately before market opening", () => {
+    const order = createSellOrder([
+      { symbol: "AAPL", quantity: 0.1, price: 100 },
+    ], new Date("2026-11-26T06:12:00.000Z"));
+    expect(order).toMatchObject({
+      type: "SELL", amount: 10, status: "COMPLETED",
+      executionAt: "2026-11-26T06:12:00.000Z",
+      executionTimezone: "America/New_York",
+      createdAt: "2026-11-26T06:12:00.000Z",
+    });
+  });
+
   it("rounds proceeds per position and schedules execution at the next weekday open", () => {
     const order = createSellOrder([
       { symbol: "AAPL", quantity: 0.001, price: 16 },
