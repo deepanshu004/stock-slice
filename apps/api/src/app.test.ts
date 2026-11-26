@@ -29,10 +29,39 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
 describe("orders API", () => {
+  it.each([
+    { placedAt: "2026-11-21T16:00:00.000Z", executionAt: "2026-11-23T14:30:00.000Z" },
+    { placedAt: "2026-11-22T16:00:00.000Z", executionAt: "2026-11-23T14:30:00.000Z" },
+    { placedAt: "2026-11-20T21:00:00.000Z", executionAt: "2026-11-23T14:30:00.000Z" },
+    { placedAt: "2026-11-23T12:00:00.000Z", executionAt: "2026-11-23T14:30:00.000Z" },
+    { placedAt: "2026-03-07T16:00:00.000Z", executionAt: "2026-03-09T13:30:00.000Z" },
+    { placedAt: "2026-10-31T16:00:00.000Z", executionAt: "2026-11-02T14:30:00.000Z" },
+  ])("preserves the market-open schedule for buys, sells, and history placed at $placedAt", async ({ placedAt, executionAt }) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(placedAt));
+    await addMoney();
+    const bought = await request(app).post("/api/orders").send(orderRequest).expect(201);
+    const sold = await request(app).post("/api/orders").send({
+      type: "SELL", positions: [{ symbol: "AAPL", quantity: 0.1 }],
+    }).expect(201);
+
+    for (const result of [bought, sold]) {
+      expect(result.body.data).toMatchObject({
+        status: "SCHEDULED", executionAt,
+        executionTimezone: "America/New_York", createdAt: placedAt,
+      });
+      const retrieved = await request(app).get(`/api/orders/${result.body.data.id}`).expect(200);
+      expect(retrieved.body.data).toEqual(result.body.data);
+    }
+    const history = await request(app).get("/api/orders").expect(200);
+    expect(history.body.data).toEqual([sold.body.data, bought.body.data]);
+  });
+
   it("creates calculated orders and returns history newest first", async () => {
     await addMoney();
     const first = await request(app).post("/api/orders").send(orderRequest).expect(201);
@@ -196,8 +225,7 @@ describe("demo wallet and owned positions", () => {
   it("funds a buy, sells part of an owned stock, and closes the remaining positions", async () => {
     await addMoney(app, 500);
     const bought = await request(app).post("/api/orders").send(orderRequest).expect(201);
-    expect(bought.body.data.status).toBe("COMPLETED");
-    expect(bought.body.data.executionAt).toBe(bought.body.data.createdAt);
+    expect(bought.body.data.status).toBe("SCHEDULED");
     await request(app).get("/api/wallet").expect(200, {
       data: { balance: 400, currency: "USD", paymentMode: "demo" },
     });
@@ -211,9 +239,8 @@ describe("demo wallet and owned positions", () => {
     const partial = await request(app).post("/api/orders").send({
       type: "SELL", positions: [{ symbol: " aapl ", quantity: 0.15 }],
     }).expect(201);
-    expect(partial.body.data).toMatchObject({ type: "SELL", amount: 22.5, status: "COMPLETED" });
+    expect(partial.body.data).toMatchObject({ type: "SELL", amount: 22.5, status: "SCHEDULED" });
     expect(partial.body.data.allocations[0]).toMatchObject({ symbol: "AAPL", shares: 0.15, price: 150 });
-    expect(partial.body.data.executionAt).toBe(partial.body.data.createdAt);
     const remaining = await request(app).get("/api/positions").expect(200);
     expect(remaining.body.data).toEqual(expect.arrayContaining([
       { symbol: "AAPL", quantity: 0.25, price: 150, marketValue: 37.5 },

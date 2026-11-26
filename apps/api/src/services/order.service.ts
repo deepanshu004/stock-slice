@@ -14,8 +14,7 @@ export class OrderService {
     let order: Order;
     let commit: () => void;
     if (input.type === "BUY") {
-      const calculated = createOrder(input, this.sharePrecision);
-      order = { ...calculated, executionAt: calculated.createdAt, status: "COMPLETED" };
+      order = createOrder(input, this.sharePrecision);
       commit = this.accountService.prepareBuy(order);
     } else {
       const sale = this.accountService.prepareSell(input);

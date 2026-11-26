@@ -25,7 +25,7 @@ export interface Order {
   executionAt: string;
   executionTimezone: string;
   createdAt: string;
-  status: "COMPLETED";
+  status: "SCHEDULED" | "COMPLETED";
 }
 
 export interface ApiConfig {

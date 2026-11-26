@@ -95,7 +95,7 @@ Include the `/api` suffix. Restart Vite after changing this file, or rebuild the
 <img width="1408" height="881" alt="image" src="https://github.com/user-attachments/assets/7322f100-b326-49e8-b3fe-1f30003b8f1e" />
 
 
-The wallet starts at USD 0. Choose **Add money**, enter an amount, and use the demo card to fund it. **Buy** debits the wallet and adds the purchased shares to your positions. **Sell** displays those positions with quantity inputs and minus/plus controls; a completed sale credits its proceeds back to the wallet. Balances and positions survive a page refresh and reset when the API process restarts.
+The wallet starts at USD 0. Choose **Add money**, enter an amount, and use the demo card to fund it. **Buy** debits the wallet and adds the purchased shares to your positions. **Sell** displays those positions with quantity inputs and minus/plus controls; placing a sale credits its proceeds back to the wallet. These demo account changes happen immediately, while each order records a scheduled market-open execution time. Balances and positions survive a page refresh and reset when the API process restarts.
 
 ## Tests and builds
 
@@ -191,7 +191,9 @@ curl -X POST http://localhost:4000/api/orders \
 
 The default share precision is 3 decimal places and can be changed with `SHARE_PRECISION` (integer from 0 to 10). `CORS_ORIGIN` accepts a comma-separated origin allowlist; by default it permits Vite on ports 5174 and 5175. A partner-provided buy `marketPrice` takes priority over the fixed USD 100 price. Buy allocations must be positive and total 100%; symbols must be unique. Dollar allocations use integer cents and distribute rounding remainders by largest fractional remainder. Shares are rounded down so their estimated trade value never exceeds the allocation. Any residual is returned as `unallocatedAmount`; the wallet is debited by the full requested buy amount.
 
-Placed demo orders complete immediately with status `COMPLETED` and `executionAt` equal to `createdAt`. Sells use the last simulated purchase price recorded for each symbol and round each symbol's proceeds to cents. The API rejects insufficient funds, unowned symbols, excess sell quantities, duplicate symbols, and quantities beyond the configured precision. Rejected orders do not change the wallet, positions, or order history. The standalone weekday market-open helper remains available in the domain; it does not delay the demo's bookkeeping.
+New BUY and SELL orders have status `SCHEDULED`. `createdAt` records placement, and `executionAt` records the next weekday opening at 09:30 in `America/New_York`: orders placed before 09:30 on a weekday use that day's opening; orders placed at or after 09:30 use the next weekday. Saturday and Sunday orders use Monday's opening. The IANA timezone handles daylight-saving changes, and timestamps are returned in UTC. This schedule skips weekends only; exchange holidays are not modeled.
+
+The simulation updates the wallet and owned positions immediately when an order is placed. Sells use the last simulated purchase price recorded for each symbol and round each symbol's proceeds to cents. There is no background execution worker, broker routing, or automatic transition from `SCHEDULED` to `COMPLETED`. The API rejects insufficient funds, unowned symbols, excess sell quantities, duplicate symbols, and quantities beyond the configured precision. Rejected orders do not change the wallet, positions, or order history.
 
 Requests log method, path, status, and elapsed milliseconds to the API console. The API also applies Helmet security headers, a configurable CORS allowlist, a JSON body-size limit, input schemas, and per-IP rate limits for order creation and demo funding.
 

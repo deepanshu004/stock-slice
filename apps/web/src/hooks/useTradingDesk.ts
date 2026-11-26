@@ -216,10 +216,10 @@ export function useTradingDesk() {
       const order = await submitOrder(input);
       setLastOrder(order);
       setOrders((current) => [order, ...current.filter(({ id }) => id !== order.id)]);
-      setNotice(`${order.type === "BUY" ? "Buy" : "Sell"} order completed`);
+      setNotice(`${order.type === "BUY" ? "Buy" : "Sell"} order ${order.status === "SCHEDULED" ? "scheduled" : "completed"}`);
       if (order.type === "SELL") setSellQuantities({});
       const refreshError = await refreshAccount();
-      if (refreshError) setError(`Your order completed, but account data could not refresh. ${refreshError}`);
+      if (refreshError) setError(`Your order was placed, but account data could not refresh. ${refreshError}`);
     } catch (reason) {
       setError(errorMessage(reason, "Unable to place order. Please try again."));
     } finally {

@@ -31,7 +31,7 @@ export function SellHoldings({ positions, quantities, precision, proceeds, loadi
           </div>;
         })}
       </div>}
-    <div className="sell-proceeds"><div><b>Estimated proceeds</b><span>Credited to your demo wallet after selling</span></div><output aria-label="Estimated proceeds">{currency.format(proceeds)}</output></div>
+    <div className="sell-proceeds"><div><b>Estimated proceeds</b><span>Credited to your demo wallet when the order is placed</span></div><output aria-label="Estimated proceeds">{currency.format(proceeds)}</output></div>
     <p className="sell-price-note">Sells use the reference price stored with each owned stock.</p>
   </div>;
 }

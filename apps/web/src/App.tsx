@@ -1,6 +1,6 @@
 import {
-  Activity, ArrowLeftRight, Check, ChevronDown, CircleAlert, Clock3,
-  BriefcaseBusiness, RefreshCw, Settings2, TrendingUp, Wallet,
+  ArrowLeftRight, Check, ChevronDown, CircleAlert,
+  RefreshCw, TrendingUp, Wallet,
 } from "lucide-react";
 import { AddMoneyDialog } from "./components/AddMoneyDialog";
 import { OrderHistory } from "./components/OrderHistory";

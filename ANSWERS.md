@@ -11,14 +11,15 @@ I first translated the prompt into an API contract and isolated the financial ru
 - The fixed fallback stock price is USD 100. A valid partner price overrides it for that holding.
 - Shares are fractional and are rounded down, not to-nearest, so their estimated value does not exceed their allocation. The rounding remainder is surfaced rather than redistributed into an unaffordable fraction.
 - Buy allocations are rounded to cents, with split remainders distributed by largest fractional remainder so allocations sum to the requested amount exactly. The full requested amount is debited from the demo wallet, and share-rounding residuals are disclosed on the order.
-- Placed demo orders complete immediately and update account balances and positions. The standalone weekday-open helper remains available for scheduling calculations, but does not delay these simulated trades.
+- New BUY and SELL orders are `SCHEDULED` for 09:30 in `America/New_York`: the same weekday before opening, or the next weekday at or after opening. Weekend orders use Monday's opening. The IANA timezone handles daylight-saving changes; exchange holidays are not modeled.
+- Demo account balances and positions update immediately on placement. There is no background execution worker or automatic transition to `COMPLETED` when the scheduled time arrives.
 - Buys require sufficient wallet funds. Sells accept specific owned quantities, cannot exceed the available shares, and credit proceeds at the last simulated purchase price. No trades are routed to a broker.
 - Card funding is simulated with a fixed demo card; no real card details or payments are processed. The wallet begins at zero.
 - Wallet, positions, orders, and saved portfolios exist only in process memory, are shared by the demo instance, and reset on restart.
 
 ## 3. What challenges did you face when creating your solution?
 
-The main challenge was avoiding drift between order history, wallet balances, and owned quantities. Services prepare and validate an account change before committing an order, so insufficient funds, oversells, invalid quantities, and failed persistence leave the account unchanged. Dollar amounts use integer cents; buy allocation remainders use the largest-remainder method, and shares round down at the configured precision. Quantity-based sells preserve fractional shares and use API-owned prices. The original scheduling helper also handles daylight-saving time through the IANA `America/New_York` zone.
+The main challenge was avoiding drift between order history, wallet balances, and owned quantities. Services prepare and validate an account change before committing an order, so insufficient funds, oversells, invalid quantities, and failed persistence leave the account unchanged. Dollar amounts use integer cents; buy allocation remainders use the largest-remainder method, and shares round down at the configured precision. Quantity-based sells preserve fractional shares and use API-owned prices. Both order paths use the weekday market-open scheduler, which handles daylight-saving time through the IANA `America/New_York` zone.
 
 ## 4. What would change for a production deployment?
 

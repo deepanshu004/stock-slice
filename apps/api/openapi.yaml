@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: Stock Slice API
   version: 1.0.0
-  description: In-memory demo wallet, portfolio allocation, and owned-stock trading. Demo payments and trades complete immediately; no real cards are charged or trades routed.
+  description: In-memory demo wallet, portfolio allocation, and owned-stock trading. New orders are scheduled for the next weekday opening at 09:30 America/New_York, while demo wallet and position changes happen immediately on placement. No real cards are charged or trades routed. Exchange holidays and automatic order completion are not implemented.
 servers:
   - url: http://localhost:4000
 paths:
@@ -128,7 +128,7 @@ paths:
                   count: { type: integer }
     post:
       summary: Place a simulated buy or sell and update the wallet and positions
-      description: Buys debit the full requested amount and add allocated shares. Sells take owned quantities and credit proceeds at each position's stored reference price. All changes complete together; rejected orders leave balances, positions, and history unchanged.
+      description: Buys debit the full requested amount and add allocated shares. Sells take owned quantities and credit proceeds at each position's stored reference price. Demo account changes happen immediately on placement. Both order types are returned as SCHEDULED with executionAt set to the next weekday opening at 09:30 America/New_York. Weekday orders before opening use the same day; orders at or after opening use the next weekday; weekend orders use Monday. Daylight-saving changes are handled by the IANA timezone, but exchange holidays are not modeled. No background worker executes orders or automatically changes their status to COMPLETED. Rejected orders leave balances, positions, and history unchanged.
       requestBody:
         required: true
         content:
@@ -136,7 +136,7 @@ paths:
             schema: { $ref: '#/components/schemas/CreateOrderRequest' }
       responses:
         '201':
-          description: Completed simulated order
+          description: Scheduled simulated order with demo account changes applied
           content:
             application/json:
               schema:
@@ -295,10 +295,16 @@ components:
       properties:
         id: { type: string, format: uuid }
         type: { type: string, enum: [BUY, SELL] }
-        status: { const: COMPLETED }
+        status:
+          type: string
+          enum: [SCHEDULED, COMPLETED]
+          description: Newly placed orders are SCHEDULED. COMPLETED is supported for compatibility; this demo does not automatically complete scheduled orders.
         amount: { type: number }
         portfolioName: { type: string }
         allocations: { type: array, items: { $ref: '#/components/schemas/Allocation' } }
-        executionAt: { type: string, format: date-time }
+        executionAt:
+          type: string
+          format: date-time
+          description: Scheduled weekday opening at 09:30 America/New_York, returned in UTC. Uses the same weekday before opening and the next weekday at or after opening, skipping Saturday and Sunday. Daylight-saving changes are handled; exchange holidays are not modeled.
         executionTimezone: { const: America/New_York }
         createdAt: { type: string, format: date-time }

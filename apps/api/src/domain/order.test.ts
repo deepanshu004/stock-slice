@@ -24,6 +24,12 @@ describe("createOrder", () => {
     };
 
     const order = createOrder(input, 3, new Date("2026-11-23T12:00:00.000Z"));
+    expect(order).toMatchObject({
+      status: "SCHEDULED",
+      createdAt: "2026-11-23T12:00:00.000Z",
+      executionAt: "2026-11-23T14:30:00.000Z",
+      executionTimezone: "America/New_York",
+    });
     expect(order.allocations.map(({ price }) => price)).toEqual([120, 100]);
     expect(order.allocations.map(({ shares }) => shares)).toEqual([0.5, 0.4]);
     expect(order.allocations.reduce((sum, allocation) => sum + allocation.amount, 0)).toBe(100);
@@ -60,15 +66,19 @@ describe("createOrder", () => {
 });
 
 describe("nextMarketOpen", () => {
-  it("schedules before the open on the same weekday", () => {
-    expect(nextMarketOpen(new Date("2026-11-23T12:00:00.000Z")))
-      .toBe("2026-11-23T14:30:00.000Z");
-  });
-
-  it("skips weekends and schedules after-open orders for the next weekday", () => {
-    expect(nextMarketOpen(new Date("2026-11-21T16:00:00.000Z")))
-      .toBe("2026-11-23T14:30:00.000Z");
-    expect(nextMarketOpen(new Date("2026-11-23T15:00:00.000Z")))
-      .toBe("2026-11-24T14:30:00.000Z");
+  it.each([
+    { scenario: "weekday before open", now: "2026-11-23T12:00:00.000Z", expected: "2026-11-23T14:30:00.000Z" },
+    { scenario: "weekday at open", now: "2026-11-23T14:30:00.000Z", expected: "2026-11-24T14:30:00.000Z" },
+    { scenario: "weekday after open", now: "2026-11-23T15:00:00.000Z", expected: "2026-11-24T14:30:00.000Z" },
+    { scenario: "Friday before open", now: "2026-11-20T14:29:59.999Z", expected: "2026-11-20T14:30:00.000Z" },
+    { scenario: "Friday at open", now: "2026-11-20T14:30:00.000Z", expected: "2026-11-23T14:30:00.000Z" },
+    { scenario: "Friday after close", now: "2026-11-20T22:00:00.000Z", expected: "2026-11-23T14:30:00.000Z" },
+    { scenario: "Saturday", now: "2026-11-21T16:00:00.000Z", expected: "2026-11-23T14:30:00.000Z" },
+    { scenario: "Sunday", now: "2026-11-22T16:00:00.000Z", expected: "2026-11-23T14:30:00.000Z" },
+    { scenario: "Sunday in New York but Monday in UTC", now: "2026-11-23T02:00:00.000Z", expected: "2026-11-23T14:30:00.000Z" },
+    { scenario: "spring daylight-saving weekend", now: "2026-03-07T16:00:00.000Z", expected: "2026-03-09T13:30:00.000Z" },
+    { scenario: "fall daylight-saving weekend", now: "2026-10-31T16:00:00.000Z", expected: "2026-11-02T14:30:00.000Z" },
+  ])("schedules $scenario at 09:30 Eastern on the next eligible weekday", ({ now, expected }) => {
+    expect(nextMarketOpen(new Date(now))).toBe(expected);
   });
 });

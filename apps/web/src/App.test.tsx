@@ -23,8 +23,8 @@ function orderFixture(type: "BUY" | "SELL"): Order {
     ] : [
       { symbol: "AAPL", allocationPercent: 100, price: 100, amount: 10, shares: 0.1, estimatedTradeValue: 10, unallocatedAmount: 0 },
     ],
-    status: "COMPLETED",
-    executionAt: "2026-11-21T12:00:00.000Z", executionTimezone: "America/New_York", createdAt: "2026-11-21T12:00:00.000Z",
+    status: "SCHEDULED",
+    executionAt: "2026-11-23T14:30:00.000Z", executionTimezone: "America/New_York", createdAt: "2026-11-21T12:00:00.000Z",
   };
 }
 
@@ -97,7 +97,7 @@ describe("order desk", () => {
   it("adds demo funds, buys the entered portfolio, and sells an owned quantity", async () => {
     mockDeskApi();
     render(<App />);
-    await screen.findByText("Operational");
+    await screen.findByText(/Connected to API/);
     expect(screen.getByLabelText("Wallet balance")).toHaveTextContent("$0.00");
 
     fireEvent.click(screen.getByRole("button", { name: "Add money" }));
@@ -111,7 +111,17 @@ describe("order desk", () => {
 
     fireEvent.change(screen.getByLabelText("Investment amount"), { target: { value: "100" } });
     fireEvent.click(screen.getByRole("button", { name: "Buy" }));
-    expect(await screen.findByText("Buy order completed")).toBeInTheDocument();
+    expect(await screen.findByText("Buy order scheduled")).toBeInTheDocument();
+    const buySchedule = screen.getByRole("group", { name: "Execution schedule" });
+    expect(buySchedule).toHaveTextContent("Monday, Nov 23");
+    expect(buySchedule).toHaveTextContent("9:30 AM EST · Next market open");
+    expect(buySchedule).toHaveTextContent("SCHEDULED");
+    const buyHistory = screen.getByRole("button", { name: /BUY order/ });
+    expect(buyHistory).toHaveTextContent("Nov 23");
+    expect(buyHistory).toHaveTextContent("9:30 AM EST");
+    expect(buyHistory).toHaveTextContent("Nov 21");
+    expect(within(buyHistory).getByText("Scheduled")).toBeInTheDocument();
+    expect(screen.queryByText("Completed")).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByLabelText("Wallet balance")).toHaveTextContent("$400.00"));
     expect(postedBodies("/orders")[0]).toEqual({
       type: "BUY", amount: 100,
@@ -132,17 +142,19 @@ describe("order desk", () => {
     expect(quantity).toHaveValue(0);
     fireEvent.change(quantity, { target: { value: "0.1" } });
     fireEvent.click(screen.getByRole("button", { name: "Sell" }));
-    expect(await screen.findByText("Sell order completed")).toBeInTheDocument();
+    expect(await screen.findByText("Sell order scheduled")).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Execution schedule" })).toHaveTextContent("Monday, Nov 23");
+    expect(screen.getByRole("group", { name: "Execution schedule" })).toHaveTextContent("9:30 AM EST · Next market open");
     await waitFor(() => expect(screen.getByLabelText("Wallet balance")).toHaveTextContent("$410.00"));
     expect(postedBodies("/orders")[1]).toEqual({ type: "SELL", positions: [{ symbol: "AAPL", quantity: 0.1 }] });
     expect(screen.getByLabelText("Sell quantity AAPL")).toHaveAttribute("max", "0.5");
-    expect(screen.getAllByText("Completed").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Scheduled")).toHaveLength(2);
   });
 
   it("prevents buying without enough wallet funds", async () => {
     mockDeskApi({ balance: 10 });
     render(<App />);
-    await screen.findByText("Operational");
+    await screen.findByText(/Connected to API/);
     fireEvent.change(screen.getByLabelText("Investment amount"), { target: { value: "100" } });
     expect(screen.getByRole("button", { name: "Buy" })).toBeDisabled();
     expect(screen.getByText(/Insufficient wallet balance/)).toBeInTheDocument();
@@ -152,7 +164,7 @@ describe("order desk", () => {
   it("shows the empty sell state and returns to buying stocks", async () => {
     mockDeskApi();
     render(<App />);
-    await screen.findByText("Operational");
+    await screen.findByText(/Connected to API/);
     fireEvent.click(screen.getByRole("button", { name: "SELL" }));
     expect(screen.queryByLabelText(/Sell quantity/)).not.toBeInTheDocument();
     const buyStocks = screen.getByRole("button", { name: "Buy stocks" });
@@ -166,7 +178,7 @@ describe("order desk", () => {
     const state = mockDeskApi({ balance: 25 });
     state.topUpError = "Unable to add demo funds. Please try again.";
     render(<App />);
-    await screen.findByText("Operational");
+    await screen.findByText(/Connected to API/);
     fireEvent.click(screen.getByRole("button", { name: "Add money" }));
     const dialog = screen.getByRole("dialog", { name: "Add money" });
     fireEvent.change(within(dialog).getByLabelText("Top-up amount"), { target: { value: "50" } });
@@ -180,14 +192,14 @@ describe("order desk", () => {
     const state = mockDeskApi({ positions: [{ symbol: "AAPL", quantity: 0.6, price: 100, marketValue: 60 }] });
     state.orderError = "The requested sell quantity exceeds your owned shares.";
     render(<App />);
-    await screen.findByText("Operational");
+    await screen.findByText(/Connected to API/);
     fireEvent.click(screen.getByRole("button", { name: "SELL" }));
     fireEvent.change(screen.getByLabelText("Sell quantity AAPL"), { target: { value: "0.1" } });
     fireEvent.click(screen.getByRole("button", { name: "Sell" }));
     expect(await screen.findByText(state.orderError)).toBeInTheDocument();
     expect(screen.getByLabelText("Wallet balance")).toHaveTextContent("$0.00");
     expect(screen.getByLabelText("Sell quantity AAPL")).toHaveAttribute("max", "0.6");
-    expect(screen.queryByText("Sell order completed")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sell order scheduled")).not.toBeInTheDocument();
   });
 
   it("shows a useful service error instead of failing silently", async () => {
@@ -197,10 +209,27 @@ describe("order desk", () => {
     expect(screen.getByRole("button", { name: "Buy" })).toBeDisabled();
   });
 
+  it("keeps completed orders marked completed in history and the preview", async () => {
+    const state = mockDeskApi();
+    const order = orderFixture("BUY");
+    state.orders = [{ ...order, status: "COMPLETED", executionAt: order.createdAt }];
+    render(<App />);
+    await screen.findByText(/Connected to API/);
+    const history = screen.getByRole("button", { name: /BUY order/ });
+    expect(within(history).getByText("Completed")).toBeInTheDocument();
+    fireEvent.click(history);
+    const execution = screen.getByRole("group", { name: "Demo execution" });
+    expect(execution).toHaveTextContent("Saturday, Nov 21");
+    expect(execution).toHaveTextContent("7:00 AM EST · Completed in your demo account");
+    expect(execution).toHaveTextContent("COMPLETED");
+    expect(screen.queryByRole("group", { name: "Execution schedule" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Scheduled")).not.toBeInTheDocument();
+  });
+
   it("saves the editable model portfolio through the portfolio endpoint", async () => {
     mockDeskApi();
     render(<App />);
-    await screen.findByText("Operational");
+    await screen.findByText(/Connected to API/);
     fireEvent.click(screen.getByRole("button", { name: "Save portfolio" }));
     expect(await screen.findByText("Portfolio saved")).toBeInTheDocument();
     expect(postedBodies("/portfolios")).toEqual([{
